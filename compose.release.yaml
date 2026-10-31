@@ -1,0 +1,34 @@
+# Uses an image already published by .github/workflows/distribution.yml.
+# Set IMGSERVER_IMAGE=ghcr.io/sculkdev/imgserver:0.1.0 in .env.
+services:
+  imgserver:
+    image: ${IMGSERVER_IMAGE:?Set IMGSERVER_IMAGE to a GHCR image and tag}
+    pull_policy: always
+    ports:
+      - "127.0.0.1:${IMGSERVER_PORT:-18080}:18080"
+    volumes:
+      - type: bind
+        source: ./config.json
+        target: /app/config.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - imgserver-data:/app/.data
+    environment:
+      IMGSERVER_SIGNING_KEY: ${IMGSERVER_SIGNING_KEY:?Set IMGSERVER_SIGNING_KEY}
+      IMGSERVER_LISTEN: ":18080"
+      IMGSERVER_BASE_URL: ${IMGSERVER_BASE_URL:-http://localhost:18080}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    restart: unless-stopped
+    stop_grace_period: 35s
+
+volumes:
+  imgserver-data:

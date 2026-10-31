@@ -1,0 +1,1037 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "imgserver API",
+    "version": "1.0.0",
+    "description": "Shared upload service with S3-compatible storage, image variants, aliases and signed private downloads. All backends share one HS256 signing_key. Backend JWTs require iss (backend name), aud=\"imgserver\", sub (acting user), iat, exp (maximum 15 minutes after iat), unique jti, action (upload/read/delete), tenant and resource. Upload JWTs additionally require profile and optionally alias/max_bytes. Read/delete JWTs require file_id and must match stored issuer, tenant and resource. Keep the shared key server-side and pass only scoped JWTs to browsers. Backends authorize their own resources."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Files"
+    },
+    {
+      "name": "Public aliases"
+    },
+    {
+      "name": "Operations"
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "operationId": "health",
+        "summary": "Liveness check",
+        "tags": [
+          "Operations"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Healthy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "operationId": "readiness",
+        "summary": "Check metadata and object storage",
+        "tags": [
+          "Operations"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Healthy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/v1/uploads": {
+      "post": {
+        "operationId": "upload",
+        "summary": "Upload one file using an upload grant",
+        "tags": [
+          "Files"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "New file stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Completed upload retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidFile"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "description": "Send exactly one multipart field named file. The JWT selects profile, tenant, resource and optional alias. Visibility comes from the profile. A completed grant retry returns the existing file with HTTP 200; concurrent retries return 409. Failed requests release the grant. Images are pixel-limited, oriented, re-encoded without metadata and resized. GIFs are flattened to the first frame. Image output size/hash describe normalized bytes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/files/{id}": {
+      "get": {
+        "operationId": "fileMetadata",
+        "summary": "Get metadata using a read grant",
+        "tags": [
+          "Files"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metadata and content URLs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "description": "Requires a read grant even for public files.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque file ID returned by upload.",
+            "required": true
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteFile",
+        "summary": "Delete using a delete grant",
+        "tags": [
+          "Files"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Hidden and objects deleted. Repeated DELETE is safe."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "description": "Hides the file before removing objects. Retry 503 responses to finish cleanup. Keeps alias ownership reserved. Previously cached public bytes may remain until cache expiry.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque file ID returned by upload.",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/v1/files/{id}/content": {
+      "get": {
+        "operationId": "downloadFile",
+        "summary": "Download file",
+        "tags": [
+          "Files"
+        ],
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File bytes. Private: Cache-Control no-store. Public: cached one hour; aliases: 60 seconds. Range requests are not supported.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "If-None-Match matched."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "description": "Public files require no token. Private files require a read bearer JWT OR valid expires and signature parameters. Authorization happens before conditional responses.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque file ID returned by upload.",
+            "required": true
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 2048
+            },
+            "description": "Pre-generated profile size. Omit for original. Avatar sizes are square crops; other image profiles fit within the box.",
+            "required": false
+          },
+          {
+            "name": "expires",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Unix expiry from the signed URL endpoint.",
+            "required": false
+          },
+          {
+            "name": "signature",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Signature bound to file ID, variant and expiry. Required with expires for private access without a read JWT.",
+            "required": false
+          }
+        ]
+      },
+      "head": {
+        "operationId": "headFile",
+        "summary": "Get file headers",
+        "tags": [
+          "Files"
+        ],
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Same headers as GET, without file bytes."
+          },
+          "304": {
+            "description": "If-None-Match matched."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "description": "Public files require no token. Private files require a read bearer JWT OR valid expires and signature parameters. Authorization happens before conditional responses.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque file ID returned by upload.",
+            "required": true
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 2048
+            },
+            "description": "Pre-generated profile size. Omit for original. Avatar sizes are square crops; other image profiles fit within the box.",
+            "required": false
+          },
+          {
+            "name": "expires",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Unix expiry from the signed URL endpoint.",
+            "required": false
+          },
+          {
+            "name": "signature",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Signature bound to file ID, variant and expiry. Required with expires for private access without a read JWT.",
+            "required": false
+          }
+        ]
+      }
+    },
+    "/v1/files/{id}/download-url": {
+      "post": {
+        "operationId": "createDownloadURL",
+        "summary": "Create a short-lived download URL using a read grant",
+        "tags": [
+          "Files"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed URL for exact file and size.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque file ID returned by upload.",
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DownloadRequest"
+              },
+              "example": {
+                "ttl_seconds": 300
+              }
+            }
+          }
+        }
+      }
+    },
+    "/avatar/{alias}": {
+      "get": {
+        "operationId": "avatar",
+        "summary": "Get a user or project avatar by MD5 key",
+        "tags": [
+          "Public aliases"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "File bytes. Private: Cache-Control no-store. Public: cached one hour; aliases: 60 seconds. Range requests are not supported.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "If-None-Match matched."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "description": "One avatar namespace and upload mechanism for any identifier. Use profile=avatar and alias=lowercase hex MD5 of the canonical identifier in the upload JWT: a trimmed, lowercased email for a user, or the exact string project:<uuid> for a project. Both are retrieved through /avatar/<md5>, with the same image sizes and processing. The service treats the hash as an opaque lookup key. Hashes provide no privacy.",
+        "parameters": [
+          {
+            "name": "alias",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            },
+            "description": "32-character lowercase hexadecimal MD5 of an email or project:<uuid>. The same lookup and upload flow applies to both. Existing hashes can only be updated by the same issuer, tenant and resource.",
+            "required": true,
+            "examples": {
+              "user": {
+                "summary": "MD5 of user@example.com",
+                "value": "b58996c504c5638798eb6b511e6f49af"
+              },
+              "project": {
+                "summary": "MD5 of project:550e8400-e29b-41d4-a716-446655440000",
+                "value": "ff5c6a5dcbd6ac394c2d0cdf2dbbcde4"
+              }
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 2048
+            },
+            "description": "Pre-generated profile size. Omit for original. Avatar sizes are square crops; other image profiles fit within the box.",
+            "required": false
+          }
+        ]
+      }
+    },
+    "/v1/public/{profile}/{alias}": {
+      "get": {
+        "operationId": "publicAlias",
+        "summary": "Get any configured public alias",
+        "tags": [
+          "Public aliases"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "File bytes. Private: Cache-Control no-store. Public: cached one hour; aliases: 60 seconds. Range requests are not supported.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "If-None-Match matched."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "parameters": [
+          {
+            "name": "profile",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Public profile with aliases enabled.",
+            "required": true
+          },
+          {
+            "name": "alias",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Alias from an upload grant. Globally unique per profile: namespace project IDs across tenants. Existing aliases can only be updated by the same issuer, tenant and resource.",
+            "required": true
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 2048
+            },
+            "description": "Pre-generated profile size. Omit for original. Avatar sizes are square crops; other image profiles fit within the box.",
+            "required": false
+          }
+        ]
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "openapi",
+        "summary": "This OpenAPI document",
+        "tags": [
+          "Operations"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.0.3.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/docs": {
+      "get": {
+        "operationId": "docs",
+        "summary": "Swagger UI",
+        "tags": [
+          "Operations"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Swagger UI HTML.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "description": "Pinned Swagger UI assets load from unpkg.com; browser network access to that CDN is required."
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "HS256 grant signed with the shared key. Requires the action claim for this operation."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "Variant": {
+        "type": "object",
+        "required": [
+          "size",
+          "width",
+          "height",
+          "content_type",
+          "sha256"
+        ],
+        "properties": {
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "height": {
+            "type": "integer"
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        }
+      },
+      "File": {
+        "type": "object",
+        "required": [
+          "id",
+          "issuer",
+          "tenant",
+          "subject",
+          "resource",
+          "profile",
+          "name",
+          "content_type",
+          "sha256",
+          "public",
+          "size",
+          "created_at",
+          "variants"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "tenant": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string"
+          },
+          "public": {
+            "type": "boolean"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "height": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "variants": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Variant"
+            }
+          }
+        }
+      },
+      "FileResponse": {
+        "type": "object",
+        "required": [
+          "file",
+          "urls"
+        ],
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/File"
+          },
+          "urls": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "Private content URLs require a read grant or a signed URL."
+          }
+        }
+      },
+      "UploadResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FileResponse"
+          },
+          {
+            "type": "object",
+            "required": [
+              "receipt"
+            ],
+            "properties": {
+              "receipt": {
+                "type": "string",
+                "description": "One-hour HS256 receipt: iss=imgserver, aud=backend issuer. Signing key is HMAC-SHA256(shared_key, \"imgserver-v1:receipt\"). Verify tenant, subject, resource and profile before attaching the file. SHA256 and size refer to normalized stored bytes."
+              }
+            }
+          }
+        ]
+      },
+      "DownloadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "size": {
+            "type": "integer",
+            "description": "Configured image size; omit or use 0 for original."
+          },
+          "ttl_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 900,
+            "default": 300
+          }
+        }
+      },
+      "DownloadResponse": {
+        "type": "object",
+        "required": [
+          "url",
+          "expires_at"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix expiry. Anyone holding the URL can download until expiry or origin deletion."
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Malformed request or unavailable image size.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing, invalid or expired grant/signature.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Grant does not match the stored issuer, tenant, resource and file ID.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "File or alias not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Upload in progress, jti reused with different claims, or alias belongs to another resource.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Gone": {
+        "description": "Completed upload was subsequently deleted.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "TooLarge": {
+        "description": "File exceeds upload size limit.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InvalidFile": {
+        "description": "Invalid, unsupported or oversized image.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "Storage unavailable or upload capacity reached. Retry DELETE to finish partial object cleanup.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

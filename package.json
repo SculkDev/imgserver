@@ -1,0 +1,13 @@
+{
+  "name": "imgserver-tooling",
+  "private": true,
+  "engines": { "node": ">=22.19.0" },
+  "scripts": {
+    "test": "node --test client.test.mjs",
+    "check:openapi": "node validate-openapi.mjs",
+    "test:container": "node container-smoke.mjs"
+  },
+  "devDependencies": {
+    "@apidevtools/swagger-parser": "13.1.0"
+  }
+}

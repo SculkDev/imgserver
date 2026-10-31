@@ -1,0 +1,12 @@
+/config.json
+/.env
+/.data/
+/imgserver
+*.db
+*.db-shm
+*.db-wal
+coverage.out
+.DS_Store
+/node_modules/
+*.log
+*.oci.tar
