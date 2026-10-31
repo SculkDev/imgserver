@@ -122,6 +122,7 @@ jobs:
             type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') && !contains(github.ref_name, '-') }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
       - name: Build and publish
+        id: publish
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
@@ -137,3 +138,33 @@ jobs:
           cache-to: type=gha,mode=max,scope=imgserver-release
           provenance: mode=max
           sbom: true
+      - name: Verify published image and report package visibility
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+          PACKAGE_OWNER_TYPE: ${{ github.event.repository.owner.type }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker buildx imagetools inspect "${IMAGE_NAME}@${IMAGE_DIGEST}"
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request
+          image = os.environ['IMAGE_NAME']
+          owner, package = image.removeprefix('ghcr.io/').split('/', 1)
+          scope = 'orgs' if os.environ['PACKAGE_OWNER_TYPE'] == 'Organization' else 'users'
+          url = f'https://api.github.com/{scope}/{owner}/packages/container/{urllib.parse.quote(package, safe="")}'
+          request = urllib.request.Request(url, headers={
+              'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+          })
+          with urllib.request.urlopen(request, timeout=30) as response:
+              details = json.load(response)
+          visibility = details['visibility']
+          print('GHCR package visibility:', visibility)
+          print('Published image:', image + '@' + os.environ['IMAGE_DIGEST'])
+          if visibility != 'public':
+              print('::warning::For anonymous pulls, open the package settings and change visibility to public. GitHub does not expose this setting through its supported package API.')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f'Published `{image}@{os.environ["IMAGE_DIGEST"]}`\n\n')
+              summary.write(f'Package visibility: **{visibility}**. [Package settings]({details["html_url"]}/settings)\n')
+          PY
