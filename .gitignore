@@ -10,3 +10,4 @@ coverage.out
 /node_modules/
 *.log
 *.oci.tar
+__pycache__/

@@ -1,0 +1,39 @@
+name: Audit or purge registry revisions
+
+on:
+  workflow_dispatch:
+    inputs:
+      affected_revisions:
+        description: Exact old Git commit SHAs separated by spaces
+        required: true
+        type: string
+      mode:
+        description: Audit first; PURGE permanently removes matching image versions
+        required: true
+        default: AUDIT
+        type: choice
+        options: [AUDIT, PURGE]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: registry-revision-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Match image manifests against explicitly selected source revisions
+        env:
+          AFFECTED_REVISIONS: ${{ inputs.affected_revisions }}
+          CLEANUP_MODE: ${{ inputs.mode }}
+          PACKAGE_OWNER_TYPE: ${{ github.event.repository.owner.type }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 registry-cleanup.py

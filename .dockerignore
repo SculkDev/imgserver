@@ -15,3 +15,4 @@ config.*.json
 *.test.mjs
 container-smoke.mjs
 *.oci.tar
+__pycache__
