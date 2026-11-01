@@ -515,7 +515,7 @@
         "security": [],
         "responses": {
           "200": {
-            "description": "File bytes. Private: Cache-Control no-store. Public: cached one hour; aliases: 60 seconds. Range requests are not supported.",
+            "description": "Uploaded avatar bytes or a generated PNG identicon when no active upload exists. Both use Cache-Control: public, max-age=60, must-revalidate and support ETag revalidation.",
             "headers": {
               "ETag": {
                 "schema": {
@@ -556,13 +556,20 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "description": "Invalid MD5 hash or the avatar profile does not permit public aliases. A valid hash without an uploaded avatar returns a generated PNG with HTTP 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
           }
         },
-        "description": "One avatar namespace and upload mechanism for any identifier. Use profile=avatar and alias=lowercase hex MD5 of the canonical identifier in the upload JWT: a trimmed, lowercased email for a user, or the exact string project:<uuid> for a project. Both are retrieved through /avatar/<md5>, with the same image sizes and processing. The service treats the hash as an opaque lookup key. Hashes provide no privacy.",
+        "description": "One avatar namespace and upload mechanism for any identifier. Use profile=avatar and alias=lowercase hex MD5 of the canonical identifier in the upload JWT: a trimmed, lowercased email for a user, or the exact string project:<uuid> for a project. Both are retrieved through /avatar/<md5>, with the same image sizes and processing. The service treats the hash as an opaque lookup key. Hashes provide no privacy. If no avatar has been uploaded for a valid MD5, or its uploaded avatar was deleted, returns a deterministic mirrored PNG identicon generated locally from that hash. The default generated image is 256x256; size selects a size configured on the avatar profile. Generation never writes to the database or object storage. An uploaded avatar automatically replaces the generated image. Invalid hashes and disabled public avatar profiles return 404; database errors return 503.",
         "parameters": [
           {
             "name": "alias",
@@ -592,7 +599,85 @@
               "minimum": 16,
               "maximum": 2048
             },
-            "description": "Pre-generated profile size. Omit for original. Avatar sizes are square crops; other image profiles fit within the box.",
+            "description": "An image size configured on the avatar profile (default: 32, 64, 128, 256). Omit for the uploaded original or a 256x256 generated PNG when no upload exists.",
+            "required": false
+          }
+        ]
+      },
+      "head": {
+        "operationId": "headAvatar",
+        "summary": "Get uploaded or generated avatar headers",
+        "tags": [
+          "Public aliases"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Uploaded avatar bytes or a generated PNG identicon when no active upload exists. Both use Cache-Control: public, max-age=60, must-revalidate and support ETag revalidation.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "If-None-Match matched."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "description": "Invalid MD5 hash or the avatar profile does not permit public aliases. A valid hash without an uploaded avatar returns a generated PNG with HTTP 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "description": "One avatar namespace and upload mechanism for any identifier. Use profile=avatar and alias=lowercase hex MD5 of the canonical identifier in the upload JWT: a trimmed, lowercased email for a user, or the exact string project:<uuid> for a project. Both are retrieved through /avatar/<md5>, with the same image sizes and processing. The service treats the hash as an opaque lookup key. Hashes provide no privacy. If no avatar has been uploaded for a valid MD5, or its uploaded avatar was deleted, returns a deterministic mirrored PNG identicon generated locally from that hash. The default generated image is 256x256; size selects a size configured on the avatar profile. Generation never writes to the database or object storage. An uploaded avatar automatically replaces the generated image. Invalid hashes and disabled public avatar profiles return 404; database errors return 503.",
+        "parameters": [
+          {
+            "name": "alias",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            },
+            "description": "32-character lowercase hexadecimal MD5 of an email or project:<uuid>. The same lookup and upload flow applies to both. Existing hashes can only be updated by the same issuer, tenant and resource.",
+            "required": true,
+            "examples": {
+              "user": {
+                "summary": "MD5 of user@example.com",
+                "value": "b58996c504c5638798eb6b511e6f49af"
+              },
+              "project": {
+                "summary": "MD5 of project:550e8400-e29b-41d4-a716-446655440000",
+                "value": "ff5c6a5dcbd6ac394c2d0cdf2dbbcde4"
+              }
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 2048
+            },
+            "description": "An image size configured on the avatar profile (default: 32, 64, 128, 256). Omit for the uploaded original or a 256x256 generated PNG when no upload exists.",
             "required": false
           }
         ]
@@ -685,7 +770,8 @@
             "description": "Pre-generated profile size. Omit for original. Avatar sizes are square crops; other image profiles fit within the box.",
             "required": false
           }
-        ]
+        ],
+        "description": "Returns a public uploaded alias. For profile=avatar, a missing or deleted upload with a valid MD5 returns the same generated PNG identicon as /avatar/<md5>. Other profiles retain HTTP 404 for missing aliases."
       }
     },
     "/openapi.json": {

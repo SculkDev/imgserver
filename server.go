@@ -378,8 +378,22 @@ func (s *Server) alias(w http.ResponseWriter, r *http.Request, profile string) {
 		fail(w, 404, "alias not found")
 		return
 	}
-	f, err := s.meta.byAlias(r.Context(), profile, r.PathValue("alias"))
+	hash := r.PathValue("alias")
+	if profile == "avatar" && !hashPattern.MatchString(hash) {
+		fail(w, 404, "avatar not found")
+		return
+	}
+	v, err := variantName(r)
+	if err != nil {
+		fail(w, 400, err.Error())
+		return
+	}
+	f, err := s.meta.byAlias(r.Context(), profile, hash)
 	if err == sql.ErrNoRows {
+		if profile == "avatar" {
+			s.defaultAvatar(w, r, hash, v, p)
+			return
+		}
 		fail(w, 404, "alias not found")
 		return
 	}
@@ -387,13 +401,12 @@ func (s *Server) alias(w http.ResponseWriter, r *http.Request, profile string) {
 		s.internal(w, err)
 		return
 	}
-	if f.Deleted || !f.Public {
-		fail(w, 404, "alias not found")
+	if f.Deleted && profile == "avatar" {
+		s.defaultAvatar(w, r, hash, v, p)
 		return
 	}
-	v, err := variantName(r)
-	if err != nil {
-		fail(w, 400, err.Error())
+	if f.Deleted || !f.Public {
+		fail(w, 404, "alias not found")
 		return
 	}
 	s.serve(w, r, f, v, true)

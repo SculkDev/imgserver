@@ -34,8 +34,8 @@ Release images include OCI source/version/revision labels, BuildKit provenance a
 Push a release:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 The workflow publishes on the tag push; creating a GitHub Release separately is optional. Watch **Actions → Test and publish container** for the result, then find the image under your account or organization's **Packages**.
@@ -63,7 +63,7 @@ openssl rand -hex 32
 Put the generated value in `.env` as `IMGSERVER_SIGNING_KEY` and share that key only with your application backends. Set `IMGSERVER_IMAGE` to your actual image, for example:
 
 ```dotenv
-IMGSERVER_IMAGE=ghcr.io/sculkdev/imgserver:0.1.0
+IMGSERVER_IMAGE=ghcr.io/sculkdev/imgserver:0.1.1
 IMGSERVER_SIGNING_KEY=<your-random-key>
 IMGSERVER_BASE_URL=https://media.example.com
 IMGSERVER_PORT=18080

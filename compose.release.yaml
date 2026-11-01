@@ -1,5 +1,5 @@
 # Uses an image already published by .github/workflows/distribution.yml.
-# Set IMGSERVER_IMAGE=ghcr.io/sculkdev/imgserver:0.1.0 in .env.
+# Set IMGSERVER_IMAGE=ghcr.io/sculkdev/imgserver:0.1.1 in .env.
 services:
   imgserver:
     image: ${IMGSERVER_IMAGE:?Set IMGSERVER_IMAGE to a GHCR image and tag}

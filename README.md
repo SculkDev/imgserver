@@ -180,6 +180,10 @@ const projectKey = avatarHash('project:550e8400-e29b-41d4-a716-446655440000');
 
 For email avatars, use `MD5(lowercase(trim(email)))`, encoded as lowercase hexadecimal. For project avatars, use the exact UTF-8 string `project:<uuid>` as the MD5 input. The service receives the hash and does not distinguish user avatars from project avatars. Hashes provide lookup compatibility, not privacy.
 
+If a valid MD5 has no uploaded avatar, the service returns a deterministic PNG identicon: a colored, mirrored pattern derived from the hash. It is generated locally without database writes or S3 access and works for both user and project keys. The default image is 256×256; `?size=128` and other sizes configured on the avatar profile are supported. Uploading an avatar replaces the identicon automatically; deleting the avatar restores it. Invalid hashes still return 404, unavailable sizes return 400, and database failures return 503.
+
+Generated avatars support HEAD and ETags and use the same 60-second cache policy as uploaded avatar aliases, so an upload becomes visible after the cache expires or revalidation occurs. The same fallback is available through `/v1/public/avatar/<md5>`. Other public profiles keep their usual missing-file behavior, and disabling public access to the avatar profile disables the fallback too.
+
 Aliases are globally unique per profile; use globally unique project UUIDs in `project:<uuid>`. Uploading again with the same alias, issuer, tenant and resource atomically updates the alias after the upload succeeds. Previous file IDs remain valid until explicitly deleted, so other references are not broken. Aliases retain their ownership even after deletion to prevent takeover; deleting an old file does not affect a newer replacement.
 
 The service supports ETags and HEAD. Public file content caches for one hour, mutable aliases for 60 seconds, and private responses use `Cache-Control: no-store`. Deleted public bytes can remain in browser/CDN caches until expiry. Configure CDN purging separately if immediate public removal is required.

@@ -344,7 +344,7 @@ func TestAliasReplacementAndOwnership(t *testing.T) {
 	checkStatus(t, request(f.handler, "DELETE", "/v1/files/"+first.File.ID, accessToken(t, f, first, "delete"), nil, ""), 204)
 	checkStatus(t, request(f.handler, "GET", "/avatar/"+c.Alias, "", nil, ""), 200)
 	checkStatus(t, request(f.handler, "DELETE", "/v1/files/"+second.File.ID, accessToken(t, f, second, "delete"), nil, ""), 204)
-	checkStatus(t, request(f.handler, "GET", "/avatar/"+c.Alias, "", nil, ""), 404)
+	checkStatus(t, request(f.handler, "GET", "/avatar/"+c.Alias, "", nil, ""), 200)
 	other := c
 	other.ID = randomID(18)
 	other.Tenant = "hostile"

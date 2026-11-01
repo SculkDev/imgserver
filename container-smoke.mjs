@@ -35,6 +35,16 @@ try {
   assert.equal((await fetch(`${origin}/docs`)).status, 200);
   const spec = await (await fetch(`${origin}/openapi.json`)).json();
   assert.ok(spec.paths['/avatar/{alias}']);
+  const avatarURL = `${origin}/avatar/b58996c504c5638798eb6b511e6f49af?size=128`;
+  const avatar = await fetch(avatarURL);
+  assert.equal(avatar.status, 200); assert.equal(avatar.headers.get('content-type'), 'image/png');
+  const avatarBytes = Buffer.from(await avatar.arrayBuffer());
+  assert.deepEqual(avatarBytes.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  assert.equal(avatarBytes.readUInt32BE(16), 128); assert.equal(avatarBytes.readUInt32BE(20), 128);
+  const repeatedAvatar = await fetch(avatarURL);
+  assert.deepEqual(Buffer.from(await repeatedAvatar.arrayBuffer()), avatarBytes);
+  const cachedAvatar = await fetch(avatarURL, { headers: { 'If-None-Match': avatar.headers.get('etag') } });
+  assert.equal(cachedAvatar.status, 304);
   assert.equal(JSON.parse(docker('inspect', container))[0].Config.User, '65532:65532');
   assert.equal(JSON.parse(docker('inspect', container))[0].HostConfig.ReadonlyRootfs, true);
   docker('exec', container, '/app/imgserver', 'healthcheck', '-config', configuration);
@@ -60,7 +70,7 @@ try {
     '-issuer', 'support', '-tenant', 'acme', '-resource', 'ticket:42', '-action', 'read', '-file', uploaded.file.id);
   const content = await fetch(`${origin}/v1/files/${uploaded.file.id}/content`, { headers: { Authorization: `Bearer ${read}` } });
   assert.equal(content.status, 200); assert.equal(await content.text(), 'persisted container upload');
-  console.log(`Container smoke test passed (${version.version}): non-root, read-only, healthy, docs, uploads and restart persistence`);
+  console.log(`Container smoke test passed (${version.version}): non-root, read-only, healthy, docs, generated avatars, uploads and restart persistence`);
 } catch (error) {
   try { console.error(docker('logs', container)); } catch {}
   throw error;
