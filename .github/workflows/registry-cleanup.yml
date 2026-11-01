@@ -7,6 +7,11 @@ on:
         description: Exact old Git commit SHAs separated by spaces
         required: true
         type: string
+      audited_manifest_digests:
+        description: Previously audited manifest digests, only for resuming a partial purge
+        required: false
+        default: ""
+        type: string
       mode:
         description: Audit first; PURGE permanently removes matching image versions
         required: true
@@ -33,6 +38,7 @@ jobs:
       - name: Match image manifests against explicitly selected source revisions
         env:
           AFFECTED_REVISIONS: ${{ inputs.affected_revisions }}
+          AUDITED_MANIFEST_DIGESTS: ${{ inputs.audited_manifest_digests }}
           CLEANUP_MODE: ${{ inputs.mode }}
           PACKAGE_OWNER_TYPE: ${{ github.event.repository.owner.type }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

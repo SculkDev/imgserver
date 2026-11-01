@@ -36,7 +36,11 @@ def request(url, headers, method="GET"):
             if error.code in (429, 500, 502, 503, 504) and attempt < 3:
                 time.sleep(2 ** attempt)
                 continue
-            raise RuntimeError(f"HTTP {error.code} for {method} {urllib.parse.urlparse(url).path}") from None
+            try:
+                detail = json.loads(error.read()).get("message", "request failed")
+            except Exception:
+                detail = "request failed"
+            raise RuntimeError(f"HTTP {error.code} for {method} {urllib.parse.urlparse(url).path}: {detail}") from None
 
 
 def main():
@@ -46,6 +50,9 @@ def main():
     affected = set(os.environ["AFFECTED_REVISIONS"].split())
     if not affected or len(affected) > 100 or not all(re.fullmatch(r"[a-f0-9]{40}", rev) for rev in affected):
         raise ValueError("Supply 1..100 exact lowercase Git commit SHAs")
+    audited_digests = set(os.environ.get("AUDITED_MANIFEST_DIGESTS", "").split())
+    if len(audited_digests) > 200 or not all(re.fullmatch(r"sha256:[a-f0-9]{64}", digest) for digest in audited_digests):
+        raise ValueError("Previously audited manifests must be exact sha256 digests")
     owner, package = os.environ["GITHUB_REPOSITORY"].split("/", 1)
     image = owner.lower() + "/" + package.lower()
     scope = "orgs" if os.environ["PACKAGE_OWNER_TYPE"] == "Organization" else "users"
@@ -94,7 +101,9 @@ def main():
     # Include children even if GitHub only lists their parent index as a version.
     pending = [v["name"] for v in versions if re.fullmatch(r"sha256:[a-f0-9]{64}", v["name"])]
     inspected = set()
-    tainted = set()
+    # Explicit audited digests allow a resumed purge to remove detached
+    # attestations after their source image index has already been deleted.
+    tainted = set(audited_digests)
     while pending:
         digest = pending.pop()
         if digest in inspected:
